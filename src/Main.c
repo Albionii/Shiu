@@ -28,15 +28,22 @@ struct Editor {
     TTF_Font *font;
     SDL_Texture *text_texture;
     SDL_Rect text_rect;
+    
+    //Gap Buffer implementation
     char buffer[MAX_BUFFER];
+    int capacity;
+    int gap_left;
+    int gap_right;
+    
+    int cursor_index;
 };
 
 //Function definitions
 bool sdl_initialize(struct Editor *editor);
 void editor_cleanup(struct Editor *editor, int exit_status);
 void window_customize(struct Editor *editor);
-void handle_key_presses(struct Editor *editor, SDL_Keysym keysym, char *buffer);
-void update_text_texture(struct Editor *editor);
+void handle_key_presses(struct Editor *editor, SDL_Event *event);
+void update_text_texture(struct Editor *editor, SDL_Event *event);
 
 int main() {
     struct Editor editor = {0};
@@ -63,23 +70,19 @@ int main() {
                     break;
                 
                 case SDL_TEXTINPUT: 
-                    if (strlen(editor.buffer) + strlen(event.text.text) < MAX_BUFFER - 1) {
-                        strcat(editor.buffer, event.text.text);
-                        needs_update = true;
-                    }
+                    update_text_texture(&editor, &event);
                     break;
-                // case SDL_KEYDOWN:
-                //     handle_key_presses(&editor, event.key.keysym, buffer);
-                //     break;
+                case SDL_KEYDOWN:
+                    handle_key_presses(&editor, &event);
+                    break;
+                
+                case SDL_MOUSE_TOUCHID:
+                    break;
                 default:
                     break;
             }
         }
         
-        if (needs_update) {
-            update_text_texture(&editor);
-            needs_update = false;
-        }
         
         SDL_SetRenderDrawColor(editor.renderer, 30, 30, 30, 255);
         SDL_RenderClear(editor.renderer);
@@ -152,31 +155,47 @@ void window_customize(struct Editor *editor){
     SDL_Color color = {};
 }
 
-void handle_key_presses(struct Editor *editor, SDL_Keysym keysym, char *buffer){
-    switch(keysym.sym){
+void handle_key_presses(struct Editor *editor, SDL_Event *event){
+    switch(event->key.keysym.sym){
+        case SDLK_UP:
+            break;
+        case SDLK_LEFT:
+            break;
+        case SDLK_RIGHT: 
+            break;
         case SDLK_DOWN: 
             break;
-            
+        case SDLK_KP_ENTER:
+        case SDLK_RETURN: 
+            if (strlen(editor->buffer) < MAX_BUFFER - 1) {
+                strcat(editor->buffer, "\n");
+            }
+            break;
+        case SDLK_BACKSPACE:
+            printf("backspace");
+            break;
         default:
-            buffer[0] = keysym.sym;
-            printf("text : %s", buffer);
             break;
     }
 }
-void update_text_texture(struct Editor *editor) {
-    if (editor->text_texture) {
-        SDL_DestroyTexture(editor->text_texture);
-    }
-
-    const char *text_to_render = (strlen(editor->buffer) > 0) ? editor->buffer : " ";
-
-    SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface *surface = TTF_RenderUTF8_Blended(editor->font, text_to_render, white);
+void update_text_texture(struct Editor *editor, SDL_Event *event) {
+    if (strlen(editor->buffer) + strlen(event->text.text) < MAX_BUFFER - 1) {
+        strcat(editor->buffer, event->text.text);
     
-    if (surface) {
-        editor->text_texture = SDL_CreateTextureFromSurface(editor->renderer, surface);
-        editor->text_rect.w = surface->w;
-        editor->text_rect.h = surface->h;
-        SDL_FreeSurface(surface);
+        if (editor->text_texture) {
+            SDL_DestroyTexture(editor->text_texture);
+        }
+    
+        const char *text_to_render = (strlen(editor->buffer) > 0) ? editor->buffer : " ";
+    
+        SDL_Color white = {255, 255, 255, 255};
+        SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(editor->font, text_to_render, white,800);
+        
+        if (surface) {
+            editor->text_texture = SDL_CreateTextureFromSurface(editor->renderer, surface);
+            editor->text_rect.w = surface->w;
+            editor->text_rect.h = surface->h;
+            SDL_FreeSurface(surface);
+        }
     }
 }
