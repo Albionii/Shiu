@@ -10,11 +10,14 @@
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_touch.h>
 #include <SDL2/SDL_video.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <wchar.h>
 #include <SDL2/SDL_ttf.h>
+
+#include "../include/GapBuffer.h"
 
 
 #define WINDOW_TITLE "Shiu Editor"
@@ -29,13 +32,7 @@ struct Editor {
     SDL_Texture *text_texture;
     SDL_Rect text_rect;
     
-    //Gap Buffer implementation
-    char buffer[MAX_BUFFER];
-    int capacity;
-    int gap_left;
-    int gap_right;
-    
-    int cursor_index;
+    GapBuffer *gb;
 };
 
 //Function definitions
@@ -43,7 +40,8 @@ bool sdl_initialize(struct Editor *editor);
 void editor_cleanup(struct Editor *editor, int exit_status);
 void window_customize(struct Editor *editor);
 void handle_key_presses(struct Editor *editor, SDL_Event *event);
-void update_text_texture(struct Editor *editor, SDL_Event *event);
+void update_text_texture(struct Editor *editor, const char *new_text);
+void draw_cursor(struct Editor *editor);
 
 int main() {
     struct Editor editor = {0};
@@ -51,6 +49,8 @@ int main() {
     if(sdl_initialize(&editor)){
         editor_cleanup(&editor, EXIT_FAILURE);
     };
+    
+    editor.gb = gb_create(1024);
     
     //Here is the main editor logic
 
@@ -68,14 +68,12 @@ int main() {
                 case SDL_QUIT: 
                     editor_cleanup(&editor, EXIT_SUCCESS);
                     break;
-                
                 case SDL_TEXTINPUT: 
-                    update_text_texture(&editor, &event);
+                    update_text_texture(&editor, event.text.text);
                     break;
                 case SDL_KEYDOWN:
                     handle_key_presses(&editor, &event);
                     break;
-                
                 case SDL_MOUSE_TOUCHID:
                     break;
                 default:
@@ -87,8 +85,8 @@ int main() {
         SDL_SetRenderDrawColor(editor.renderer, 30, 30, 30, 255);
         SDL_RenderClear(editor.renderer);
         SDL_RenderCopy(editor.renderer, editor.text_texture, NULL, &editor.text_rect);
+        draw_cursor(&editor);
         SDL_RenderPresent(editor.renderer);
-        
         
         //Delay the loop to be around 60 frames/s
         SDL_Delay(16);
@@ -160,42 +158,61 @@ void handle_key_presses(struct Editor *editor, SDL_Event *event){
         case SDLK_UP:
             break;
         case SDLK_LEFT:
+            if (editor->gb->gap_left > 0) {
+                gb_move_cursor(editor->gb, editor->gb->gap_left - 1);
+            }
             break;
-        case SDLK_RIGHT: 
+        case SDLK_RIGHT: {
+            size_t total = editor->gb->gap_left + (editor->gb->capacity - editor->gb->gap_right - 1);
+            if (editor->gb->gap_left < total){
+                gb_move_cursor(editor->gb, editor->gb->gap_left + 1);
+            }
             break;
+        }
         case SDLK_DOWN: 
             break;
         case SDLK_KP_ENTER:
         case SDLK_RETURN: 
-            if (strlen(editor->buffer) < MAX_BUFFER - 1) {
-                strcat(editor->buffer, "\n");
-            }
+            gb_insert(editor->gb, "\n");
             break;
         case SDLK_BACKSPACE:
-            printf("backspace");
+            gb_backspace(editor->gb);
             break;
         default:
             break;
     }
+    //Update the texture when change is made
+    update_text_texture(editor, NULL);
 }
-void update_text_texture(struct Editor *editor, SDL_Event *event) {
-    if (strlen(editor->buffer) + strlen(event->text.text) < MAX_BUFFER - 1) {
-        strcat(editor->buffer, event->text.text);
-    
-        if (editor->text_texture) {
-            SDL_DestroyTexture(editor->text_texture);
-        }
-    
-        const char *text_to_render = (strlen(editor->buffer) > 0) ? editor->buffer : " ";
-    
-        SDL_Color white = {255, 255, 255, 255};
-        SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(editor->font, text_to_render, white,800);
-        
-        if (surface) {
-            editor->text_texture = SDL_CreateTextureFromSurface(editor->renderer, surface);
-            editor->text_rect.w = surface->w;
-            editor->text_rect.h = surface->h;
-            SDL_FreeSurface(surface);
-        }
+void update_text_texture(struct Editor *editor, const char *new_text) {
+    if (new_text){
+        gb_insert(editor->gb, new_text);
     }
+    
+    char *text_to_render = gb_get_string(editor -> gb);
+
+    if (editor->text_texture) {
+        SDL_DestroyTexture(editor->text_texture);
+    }
+
+    
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface *surface = TTF_RenderUTF8_Blended_Wrapped(
+        editor->font,
+        text_to_render,
+        white,
+        SCREEN_WIDTH);
+    
+    if (surface) {
+        editor->text_texture = SDL_CreateTextureFromSurface(editor->renderer, surface);
+        editor->text_rect.w = surface->w;
+        editor->text_rect.h = surface->h;
+        SDL_FreeSurface(surface);
+    }
+
+}
+
+
+void draw_cursor(struct Editor *editor) {
+    
 }
